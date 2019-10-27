@@ -1,0 +1,224 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+---
+
+
+## Stat 618 HW3 ##
+
+## Tianqi Luo ##
+
+
+### Problem 11.4 ###
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(covBM)
+library(lme4)
+library(arm)
+library(ggplot2)
+```
+
+### (a) ###
+
+**Load the cd4 data from the covBM package**
+```{r}
+cd4_scaled = covBM::cd4
+```
+
+```{r}
+head(cd4_scaled)
+```
+
+
+```{r}
+fit_cd4 = lm(sqrtcd4 ~ t, cd4_scaled)
+display(fit_cd4)
+```
+
+**Plot the variables with sqrtcd4 with t, plot newpid in different colors**
+```{r}
+p = ggplot(cd4_scaled, aes(x = t, y = sqrtcd4, color = as.factor(newpid))) + 
+  geom_point() + 
+  xlab("Time") + 
+  ylab("Square Root cd4") + 
+  theme(legend.position = "none")
+
+p
+```
+
+### (b) ###
+
+**Glimpse through the coefficients of every single linear regression function grouped by newpid**
+```{r}
+estimated_values = summarize(group_by(cd4_scaled, as.factor(newpid)), intercept = lm(sqrtcd4 ~ t)$coeff[1], slope = lm(sqrtcd4 ~ t)$coeff[2], fit_values = mean(lm(sqrtcd4 ~ t)$fitted.values))
+
+estimated_values %>%
+  rename(newpid = 1) -> estimated_values
+
+head(estimated_values)
+```
+
+**Plot the lines for the graph**
+```{r}
+p + geom_smooth(method = "lm", formula = y~x, se = F)
+```
+
+
+
+### (c) ###
+
+**Mutate the treatment variable as a factor, and create a data table. Use the summarize function to summarize the coefficients and fitted values of the linear values by treatment groups**
+
+
+```{r}
+library(data.table)
+dat = data.table(x = cd4_scaled$baseage, y = cd4_scaled$sqrtcd4, treatment = as.factor(cd4_scaled$treatmnt))
+```
+
+
+```{r}
+first_step = summarize(group_by(dat, treatment), intercept = lm(y~x)$coeff[1], slope = lm(y~x)$coeff[2], fit_values = mean(lm(y~x)$fitted.values))
+
+head(first_step)
+```
+
+**Treat the coefficients obtained by the first step as data, and use the y_average grouped by treatment as response variable, fit the model**
+
+```{r}
+second_step = lm(fit_values ~ intercept + slope, first_step)
+display(second_step)
+```
+
+**We can see that the two-step process is very flawed as it doesn't take into account of the standard error within the grouping variable**
+
+
+
+
+## Problem 12.2 ##
+
+### (a) ###
+
+```{r}
+cd4 = read_csv("./allvar.csv")
+
+head(cd4)
+```
+
+```{r}
+cd4$VDATE = mdy(cd4$VDATE)
+fit_1 = lmer(CD4PCT ~ VDATE + (1 | newpid), data = subset(cd4, !is.na(treatmnt) & !is.na(baseage)))
+display(fit_1)
+```
+
+
+### (b) ###
+
+```{r}
+fit_2 = lmer(CD4PCT ~ VDATE + treatmnt + baseage + (1 | newpid), data = cd4)
+
+display(fit_2)
+```
+
+### (c) ###
+
+**Extract the intercepts from fit_1**
+```{r}
+df1 = coef(fit_1)$newpid[, 1, drop = F]
+
+head(df1)
+```
+
+**Extract the intercepts for fit_2**
+```{r}
+df2 = coef(fit_2)$newpid[, 1, drop = F]
+
+head(df2)
+```
+
+**Change the names of the dataframe**
+```{r}
+names(df1) = "intercept"
+names(df2) = "intercept"
+```
+
+**Calculate the upper CI and lower CI of model 1**
+```{r}
+df1$lower_ci = df1$intercept - (1.96 * se.ranef(fit_1)$newpid[,1])
+df1$upper_ci = df1$intercept + (1.96 * se.ranef(fit_1)$newpid[,1])
+```
+
+**Calculate the upper CI and lower CI of model 2**
+```{r}
+df2$lower_ci = df2$intercept - (1.96 * se.ranef(fit_2)$newpid[,1])
+df2$upper_ci = df2$intercept + (1.96 * se.ranef(fit_2)$newpid[,1])
+```
+
+**Calculate the differences between the upper CIs and lower CIs and create a dataframe**
+```{r}
+df1$diff = df1$upper_ci - df1$lower_ci
+df2$diff = df2$upper_ci - df2$lower_ci
+df3 = data.frame(cbind(df1$diff, df2$diff))
+head(df3)
+```
+
+**Calculate the difference between model 1 and model 2**
+```{r}
+df3$diff = df3$X1- df3$X2
+```
+
+```{r}
+ggplot(df3, aes(diff)) + 
+  geom_histogram(bins = 100) + 
+  xlab("Diff") + 
+  ylab("Count")
+```
+
+**The first model always has a larger difference between the upper CI and lower CI than the second model**
+
+
+```{r}
+display(fit_1)
+```
+
+**The between variance 11.65/(11.65 + 7.31) = 0.61446**
+
+```{r}
+display(fit_2)
+```
+
+
+**The between variance for the second model is 11.45/(11.45 + 7.32) = 0.6100, a little smaller than the between variance of the first model**
+
+### (d) ###
+
+**We can see that the second model is more precise because it shrinks the partial pooling closer to the complete pooling, so it's more precise**
+
+
+## Problem 12.5 ##
+
+
+**Create the group-level predictors log_uranium_full**
+```{r}
+library(rstanarm)
+
+radon %>%
+  mutate(log_uranium_full = log_uranium[county]) ->
+  tidy_radon
+
+head(tidy_radon)
+```
+
+
+**Fit the model using lmer with the group-level predictors and varying-intercept**
+```{r}
+fit_radon = lmer(log_radon ~ floor + log_uranium_full + (1| county), tidy_radon)
+display(fit_radon)
+```
+
+
+
+
+

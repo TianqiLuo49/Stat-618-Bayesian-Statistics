@@ -1,0 +1,414 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+---
+## Stat 618 ##
+
+## Tianqi Luo ##
+
+## HW2 ##
+
+
+## Problem 3.4 ##
+
+**read the data**
+```{r}
+library(foreign)
+library(arm)
+library(tidyverse)
+child_iq = read.dta("./child.iq.dta")
+head(child_iq)
+```
+
+### (a) ###
+
+```{r}
+fit_iq = lm( ppvt ~ momage, child_iq)
+summary(fit_iq)
+```
+
+**The best fit line is ppvt = 0.8403 *momage + 67.7827**
+
+```{r}
+par(mfrow = c(2,2))
+plot(fit_iq)
+```
+
+**We can see from the first graph that the variances of the residuals are homogenous, so our normal assumption of the homogenity of variances are met. From the second graph, we can see that nearly all the residuals fall on the same line, so we can see it meets the assumptions that the residuals are normally distributed. From the third graph, we can see the standardized residuals also have homogenous variances. From the fourth graph, we can see that there are no significant outliers of the residuals that affect the regression model. Since all the assumptions are met, our model is accurate**
+
+**Draw a plot**
+```{r}
+library(ggplot2)
+ggplot(child_iq, aes(x = momage, y = 0.8403 * momage + 67.7827)) + 
+         geom_point() + 
+         geom_line() + 
+  xlab("Mom Age") + 
+  ylab("Child Test Score")
+```
+
+**According to the summary, best fit line is ppvt = 0.8403 *(momage) + 67.7827, that means when the age of the mother increase by one unit, the test score changes 0.8403. So, the best age for the mother to give birth is in the late 20s. By making this recommendation, we assume is model is valid and there are no other significant predictorss of the child's test scores**
+
+
+### (b) ###
+
+```{r}
+fit_iq_2 = lm( ppvt ~ momage + educ_cat, child_iq)
+
+summary(fit_iq_2)
+```
+
+**We can see the best fit line is ppvt = 0.3433 * momage + 4.7114 * educ_cat + 69.1554, that means according to this model, as the mom's age increase by 1, the child's test score will increase by 0.3433. As the mom's education level increase by 1, the child's test score will increase by 4.7114.**
+
+**Draw a plot base on the education level of the mother**
+```{r}
+ggplot(child_iq, aes(x = momage, y = 0.3433 * momage + 4.7114 * educ_cat + 69.1554, shape = as.factor(educ_cat))) + 
+         geom_point() + 
+         geom_line() + 
+  xlab("Mom Age") + 
+  ylab("Child Test Score") + 
+  labs(shape = "Education Level")
+```
+
+**According to the plot, my conclusions about the timing of birth has not changed as it still indicates that the best time of birth should be around the late 20s**
+
+
+### (c) ###
+
+**Create a new variable based on high school education level**
+```{r}
+child_iq %>%
+  mutate(high_school = ifelse(educ_cat >=2, 1, 0)) ->
+  child_iq_new
+```
+
+**Fit a model with the variable and interaction**
+```{r}
+fit_iq_3 = lm(ppvt ~ momage + high_school + I(momage * high_school), child_iq_new)
+
+summary(fit_iq_3)
+```
+
+**Best fit line is ppvt = -1.2402 * momage -38.4088 * high_school + 2.2097(momage * high_school) + 105.2202**
+
+```{r}
+ggplot(child_iq_new, aes(x = momage, y = -1.2402 * momage - 38.4088 * high_school + 2.2097 * (momage * high_school) + 105.2202, shape = as.factor(high_school))) + 
+  geom_point() + 
+  geom_line() + 
+  xlab("Mom Age") + 
+  ylab("Child Test Score") + 
+  labs(shape = "High School Completion")
+```
+
+### (d) ###
+
+**Create the test and train data**
+```{r}
+child_iq_train = child_iq[1:200, ]
+child_iq_test = child_iq[201:dim(child_iq)[1], ]
+```
+
+**Fit the model with the train data, and use it to predict the test data**
+```{r}
+fit_iq_4 = lm(ppvt ~ momage + educ_cat, data = child_iq_train)
+
+child_iq_pred = predict(fit_iq_4, child_iq_test)
+```
+
+**Plot the predicted values with the observed values**
+```{r}
+plot(child_iq_pred, child_iq_test$ppvt, xlab = "Prediction", ylab = "Observed")
+abline(a = 0, b = 1)
+```
+
+## Problem 4.4 ##
+
+### (a) ###
+```{r}
+pollution = read.dta("./pollution.dta")
+
+head(pollution)
+```
+
+
+
+```{r}
+mortality_fit = lm(mort ~ nox, pollution)
+par(mfrow = c(2,2))
+plot(mortality_fit)
+```
+
+**We can see that the residuals plot that the residuals do not have homogenous variances, so our model is not the best fit for the data**
+
+### (b) ###
+```{r}
+mortality_fit_2 = lm(log(mort) ~ log(nox), pollution)
+par(mfrow = c(2,2))
+plot(mortality_fit_2)
+```
+
+**We can see from the residuals plot that the variances much more similar for the residuals are much closer than our previous graph, so it is a better fit for the data**
+
+```{r}
+summary(mortality_fit_2)
+```
+
+### (c) ###
+
+
+**Our model is log(mort) = 0.015893 * log(nox) + 6.807175, if nox increases by 1%, than 0.015893 * log(nox(1.01)) + 6.807175 = 0.015893 * log(nox) + 6.807175 + 0.015893 * log(1.01) = log(mort) + 0.015893 * 0.01 ~ log(mort) + 0.02%. So if nox increases by 1%, the response increase by 0.02%, roughly 1% of the slope coefficient**
+
+
+### (d) ###
+
+***Fit the log transformation model with nox, so2 and hc**
+```{r}
+mortality_fit_3 = lm(log(mort) ~ log(nox) + log(so2) + log(hc), pollution)
+summary(mortality_fit_3)
+```
+
+```{r}
+par(mfrow = c(2,2))
+plot(mortality_fit_3)
+```
+
+**We can see from the graph that the model looks good**
+
+Intercept : The mortality rate for an individual exposed to average levels of nox, so2 and hc is e^(6.826749) = 922.1
+
+Log(nox) : One unit of increase of exposure to nox will increase the mortality rate by a factor of e^(0.059837) = 1.062. 
+
+Log(so2) : One unit of increase of exposure to so2 will increase the mortality rate by a factor of e^(0.014309) = 1.014. 
+
+Log(hc) : One unit of increase of exposure of hc will decrease the mortality rate by a factor of e^(-0.060812) = 0.941. 
+
+
+
+### (e) ###
+
+**Build the train and test data**
+```{r}
+train_pollution = pollution[1:(dim(pollution)[1]/2), ]
+test_pollution = pollution[(dim(pollution)[1]/2 + 1) : dim(pollution)[1], ]
+```
+
+
+**Use the train model to predict the test data**
+```{r}
+mortality_fit_4 = lm(log(mort) ~ log(nox) + log(so2) + log(hc), train_pollution)
+pollution_pred = predict(mortality_fit_4, test_pollution)
+plot(exp(pollution_pred), test_pollution$mort, xlab = "Predicted Mortality", ylab = "Observed Mortality")
+abline(a = 0, b = 1)
+```
+
+## Problem 5.4 ##
+
+### (a) ###
+
+**We want to see the relationship between the Direction and other variables in the weekly dataset**
+
+```{r}
+library(ISLR)
+attach(Weekly)
+levels(Weekly$Direction) = c(0,1)
+head(Weekly)
+```
+
+
+
+**Fit a glm model**
+```{r}
+direction_glm = glm(Direction ~ Lag1 + Lag3 + Lag5 , Weekly, family = binomial)
+
+display(direction_glm)
+```
+
+### (b) ###
+
+**Model 1**
+
+```{r}
+direction_glm_1 = glm(Direction ~ Lag1 + Lag2 + Lag3 + Lag4 + Lag5 + Volume, data = Weekly, family = binomial)
+```
+
+
+**Model 2**
+```{r}
+direction_glm_2 = glm(Direction ~ Lag1 + Lag2 + Lag3 + Lag4 + Lag5 + I(Lag4 * Volume), data = Weekly, family = binomial)
+```
+
+
+**Model 3**
+```{r}
+direction_glm_3 = glm(Direction ~ Lag1 + I(Lag1^2) + Lag2 + I(Lag2^2) + Volume, data = Weekly, family = binomial)
+```
+
+### (c) ###
+
+**Choose model 1**
+```{r}
+display(direction_glm_1)
+```
+
+### i ###
+
+Lag1: For one unit of increase of Lag1, the odds of Up decreases by e^(-0.04) = 0.96
+
+Lag2: For one unit of incrase of Lag2, the odds of Up increases by e^(0.06) = 1.062
+
+Lag2: For one unit of increase of Lag3, the odds of Up decreases by 0.98. 
+
+Lag3: For one unit of increase of Lag 4, the odds of Up decreases by e^(-0.03) = 097
+
+Lag4: For one unit of increase of Lag 5, the odds of Up decreases by e^(-0.01) = 0.99
+
+Volume: For one unit of increase of Volume, the odds of Up decreases by e^(-0.02) = 0.98
+
+
+
+
+### ii ###
+
+**Null Model**
+```{r}
+probs = predict(direction_glm, type = "response")
+pred_glm_weekly = rep(0, length(probs))
+pred_glm_weekly[probs > 0.5] = 1
+table(pred_glm_weekly, Weekly$Direction)
+mean(pred_glm_weekly != Weekly$Direction)
+```
+**The error rate for the null model is 43.893%**
+
+
+**Fitted Model**
+```{r}
+probs = predict(direction_glm_2, type = "response")
+pred_glm_weekly = rep(0, length(probs))
+pred_glm_weekly[probs > 0.5] = 1
+table(pred_glm_weekly, Weekly$Direction)
+mean(pred_glm_weekly != (Weekly$Direction))
+```
+
+**The error rate for the fitted model is 43.802%**
+
+
+
+### iii ###
+
+```{r}
+display(direction_glm)
+```
+**The residual deviance is 1486.4**
+
+
+```{r}
+display(direction_glm_2)
+```
+**The residual deviance is 1486.7**
+
+
+
+**The residual deviance for both models are almost the same, so no there's no obvious improvement. **
+
+
+### iv ###
+
+
+**Build the train data and test data for years before and after 2009**
+```{r}
+weekly_train = Weekly[Year < 2009,  ]
+weekly_test = Weekly[!(Year < 2009), ]
+```
+
+**Fit the model with the train data**
+```{r}
+direction_glm_train = glm(Direction ~ Lag1 + Lag2 + Lag3 + Lag4 + Lag5 + I(Lag4 * Volume), data = weekly_train, family = "binomial")
+
+display(direction_glm_train)
+```
+
+
+**Use the train model to predict the test data and calculate the error rate**
+```{r}
+probs_new = predict(direction_glm_train, weekly_test, type = "response")
+pred_glm_weekly_2 = rep(0, length(probs_new))
+pred_glm_weekly_2[probs_new > 0.5] =  1
+table(pred_glm_weekly_2, weekly_test$Direction)
+mean(pred_glm_weekly != (Weekly$Direction))
+```
+
+
+## Problem 6.1 ##
+
+### (a) ###
+
+
+```{r}
+risky_behavior = read.dta("./risky_behaviors.dta")
+head(risky_behavior)
+```
+
+**Fit the glm model(poisson) for the data with fupacts and women alone**
+```{r}
+suppressWarnings({poisson_risky = glm(fupacts ~ women_alone, family = "poisson", data = risky_behavior)})
+summary(poisson_risky)
+```
+
+
+
+
+
+**Plot the predicted values along with the standardized residuals**
+```{r}
+plot(predict(poisson_risky), rstandard(poisson_risky), xlab = "Predicted Values", ylab = "Residuals")
+```
+
+**We can see this is a very bad fit for the model. There is evidence for overdispersion as we can see the variance are much bigger than the means for the expected values**
+
+
+### (b) ###
+
+**Fit a glm model(poisson) with other variables**
+```{r}
+suppressWarnings({poisson_risky_2 = glm(fupacts ~ women_alone + sex + bupacts + couples + bs_hiv, data = risky_behavior, family = "poisson")})
+summary(poisson_risky_2)
+```
+
+**Plot the predicted values along with the standardized residuals**
+```{r}
+plot(predict(poisson_risky_2), rstandard(poisson_risky_2), xlab = "Predicted Values", ylab = "Residuals")
+```
+
+**It's a much better model than the previous one, but it's still far from perfect. We can see evidence of overdispersion as the variance is much higher than the mean as the predicted values get smaller**
+
+### (c) ###
+
+**Using a glm model(quasi-poisson) to fit the overdispersed model**
+```{r}
+poisson_risky_3 = glm(fupacts ~ women_alone + sex + bupacts + couples + bs_hiv, family = "quasipoisson", data = risky_behavior)
+
+summary(poisson_risky_3)
+```
+
+**Plot the predicted values along with the standardized residuals**
+```{r}
+plot(predict(poisson_risky_3), rstandard(poisson_risky_3), xlab = "Expected Values", ylab = "Residuals")
+```
+
+**The quasi-poisson model takes into account of the overdispersion and increasing the dispersion parameter. As a result, we can see compared with the poisson model, the quasi-poisson scales the residuals yielding much smaller ones than the poisson model. Therefore, it is a much better model than the poisson model. So the quasi-model is a good fix for overdispersion**
+
+
+### (d) ###
+
+**Yes it is a problem because the observations coupling from the couples varialbe won't be independently and identically distributed. As a result, it's likely to see a very strong correlation from the results of both parties of the couples variable**
+
+
+
+
+
+
+
+
+
+
+

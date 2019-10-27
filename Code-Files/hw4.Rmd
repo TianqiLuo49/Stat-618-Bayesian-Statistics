@@ -1,0 +1,101 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+---
+## Stat 618 HW5 ##
+
+
+
+
+
+## Tianqi Luo ##
+
+
+
+## 13.2 ##
+
+**See picture above.**
+
+![Problem 13.2 Solution](./Model.jpeg)
+
+
+## 13.4 ##
+
+```{r}
+library(tidyverse)
+```
+
+```{r}
+age_guessing = read.table("./age_guessing.txt", header = TRUE)
+```
+
+**Choose the only relevant variables, and change the names of the columns into the real ages of the 10 persons**
+```{r}
+age_guessing %>%
+  slice(-11) %>%
+  dplyr::select(c("Group" : "X10")) -> tidy_age
+
+names(tidy_age)[2:11] = c(29,30,14,42,37,57,73,24,82,45)
+
+tidy_age
+```
+
+
+**Clean the data, make the real ages a variable**
+```{r}
+tidy_age %>%
+  gather(c("29":"45"), key = "Individual", value = "Guessed.Age.Difference") %>%
+  mutate(Individual = as.numeric(Individual)) %>%
+  rename("Real.Age" = 2) ->
+  final_tidy_age
+
+head(final_tidy_age)
+```
+
+**Fit the model for Real Age with all the variables and a varying intercept for groups**
+```{r}
+library(lme4)
+library(arm)
+fit_age = lmer(Real.Age ~ Guessed.Age.Difference + Group + (1 | Group), data = final_tidy_age)
+display(fit_age)
+```
+
+
+
+## 13.5 ##
+
+
+### (a) ###
+
+**Expand the model with the varying slopes but without the varying intercept**
+```{r message = FALSE}
+library(covBM)
+model_1_varying_slope = lmer(sqrtcd4 ~ t + (1 | newpid) + (t - 1|treatmnt), cd4)
+display(model_1_varying_slope)
+```
+
+### (b) ###
+
+**Expand the model without the varying slopes but with varying intecepts for time**
+```{r message = FALSE}
+model_2_varying_intercept = lmer(sqrtcd4 ~t +  (1|newpid) + (1|t), cd4)
+display(model_2_varying_intercept)
+```
+
+### (c) ###
+
+**We can see from display that both models have the same deviance and nearly identical AIC, so both models are about the same.**
+
+
+**Draw graphs for model 1 and model 2**
+```{r}
+plot(model_1_varying_slope, xlab = "Fitted Values", ylab = "Residuals", main = "Model 1")
+```
+
+
+```{r}
+plot(model_2_varying_intercept, xlab = "Fitted Values", ylab = "Residuals", main = "Model 2")
+```
+
+**We can see from the graphs that, for both Model 1 and Model 2, the residuals have nearly the same variances. So we can conclude both Model 1 and Model 2 are about the same in terms of fitting the model**

@@ -1,0 +1,186 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+---
+
+## Stat 618 ## 
+
+## Tianqi Luo ##
+
+## HW1 ##
+
+## 2 ##
+
+**(1)**
+
+```{r}
+library(tidyverse)
+girls = read.table("./girls.txt")
+head(girls)
+```
+
+
+```{r}
+girls %>% 
+  select(V2) %>%
+  rename(girlbirths = 1) ->
+  tidy_girls
+
+head(tidy_girls)
+```
+
+
+```{r}
+actual_sd = sd(tidy_girls$girlbirths)
+p = mean(tidy_girls$girlbirths)
+actual_sd
+p
+```
+
+```{r}
+n = 3900
+expected_sd = sqrt((p * (1-p))/n)
+expected_sd
+```
+
+**The actual standard deviation is 0.00641, the theoretical standard deviation is 0.00800**
+
+
+
+**(2)**
+
+```{r}
+alpha = 0.05
+df = 23
+chi_square_0.025 = qchisq(1 - alpha/2, df)
+chi_square_0.975 = qchisq(alpha/2, df)
+
+chi_square_0.025
+chi_square_0.975
+```
+
+```{r}
+lower_bound = sqrt((df*(expected_sd)^2)/(chi_square_0.025))
+lower_bound 
+```
+
+```{r}
+upper_bound = sqrt((df*(expected_sd)^2)/(chi_square_0.975))
+upper_bound
+```
+
+**We can see that the 95% CI for the theoretical standard deviation is (0.00622, 0.0112), the actual standard deviation is 0.00641. Since the actual standard deviation falls within the 95% CI for the theoretical standard deviation, the difference is not statistically significant**
+
+
+## 3 ##
+
+```{r}
+n1 = 1000
+N1 = 20
+```
+
+
+```{r}
+mean_single = (0.5) * (0 + 1)
+var_single = (1/12) * (1-0)^2
+
+total_mean = mean_single * N1 
+total_sd = sqrt(var_single * N1)
+
+total_mean
+total_sd
+```
+
+```{r}
+set.seed(4744470)
+sim = runif(N1 * n1)
+mat = matrix(sim, nrow = n1, ncol = N1)
+```
+
+```{r}
+data = data.frame(rowSums(mat))
+
+data %>%
+  rename(Sum = 1) ->
+  tidy_data
+```
+
+```{r}
+ggplot(tidy_data, aes(x = Sum)) + 
+  geom_histogram(aes(y = ..density..), binwidth = 1, alpha = 0.1) + 
+  geom_density(lty = 2) + 
+  stat_function(fun=dnorm, args=list(mean=total_mean, sd=total_sd), lwd = 2, col = 'blue', alpha = 0.5) + 
+  xlab("Sum X") + 
+  ylab("Density")
+```
+
+**The distribution of the curve and the distribution of the histogram for the simulation are very similar. However, it does vary quite a bit at the mean. With the increase number of simulations, the histogram will become narrower and more similar with the curve. When n is big enough, the histogram will completely overlap with the curve**
+
+
+## 4 ##
+
+```{r}
+N2 = 100
+n2= 1000
+men_mean = 69.1
+women_mean = 63.7
+men_sd = 2.9
+women_sd = 2.7
+```
+
+```{r}
+set.seed(4744469)
+sim_men = rnorm(n2 * N2, mean = men_mean, sd = men_sd)
+sim_women = rnorm(n2 * N2, mean = women_mean, sd = women_sd)
+mat_men = matrix(sim_men, nrow = n2, ncol = N2)
+mat_women = matrix(sim_women, nrow = n2, ncol = N2)
+```
+
+```{r}
+height_data = data.frame(men_height_mean = rowMeans(mat_men), women_height_mean = rowMeans(mat_women))
+
+head(height_data)
+```
+
+```{r}
+height_data %>%
+  mutate(height_difference = men_height_mean - women_height_mean) ->
+  final_height_data
+```
+
+```{r}
+ggplot(final_height_data, aes(x = height_difference)) + 
+  geom_histogram(binwidth = 0.1) + 
+  xlab("Height Difference") + 
+  ylab("Count")
+```
+
+**Calculate the observed mean and observed standard deviation for the height difference**
+```{r}
+final_height_data %>%
+  summarize(mean_height_difference = mean(height_difference), sd_height_difference = sd(height_difference)) ->
+  simulation_values
+
+simulation_values
+```
+
+**We can see the observed mean of the height difference is 5.384, and the observed standard deviation of height difference is 0.403** 
+
+
+**Theoretical mean and sd**
+```{r}
+theoretical_mean = men_mean - women_mean
+theoretical_sd = sqrt((men_sd)^2 + (women_sd)^2)
+data.frame(c(theoretical_mean, theoretical_sd))
+```
+
+**We can see the theoretical mean of height difference is 5.400, and the theoretical standard deviation of height difference is 3.962**
+
+**So, we can see that the theoretical and observed values for mean and standard deviation of height differences are extremely similar**
+
+
+
+
+
+  

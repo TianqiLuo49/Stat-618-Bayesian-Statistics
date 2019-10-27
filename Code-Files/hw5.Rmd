@@ -1,0 +1,230 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+---
+## Stat 618 HW5 ##
+
+## Tianqi Luo ##
+
+### Question 14.5 ###
+
+### (a) ###
+
+**Read in the data**
+```{r}
+library(arm)
+library(tidyverse)
+dating = read.csv("./SpeedDatingData.csv")
+```
+
+**Fit a classical logistic regression**
+```{r}
+date_glm = glm(match ~ attr + sinc + intel + fun + amb + shar, family = "binomial", data = dating)
+
+display(date_glm)
+```
+
+**Coefficients analysis: **
+
+**For one unit of increase in attractiveness, the odds of interest in seeing the person again would be e^(0.22) = 1.246 times the odds of not interested**
+
+**For one unit of increase in sincerity, the odds of interest in seeing the other person again would be e^(-0.02) = 0.980 times the odds of not interested**
+
+**For one unit of increase in fun, the odds of interest in seeing the other person again would be e^(0.25) = 1.284 times the odds of not interested**
+
+**For one unit of increase for intelligence, the odds of interest in seeing the person again would be e^(0.07) = 1.073 times the odds of not interested**
+
+**For one unit of increase for ambition, the odds of interest in seeing the person again would be e^(-0.12) = 0.887 times the odds of not interested**
+
+**For one unit of increase for shared interest, the odds of interest in seeing the other person again would be 1.234 times the odds of not interested**
+
+**We can see from above that, attractiveness, fun, and shared interest are the top 3 key elements**
+
+
+
+### (b) ###
+
+**Expand the model using glmer function with the rater(iid) as a varying intercept**
+```{r}
+library(lme4)
+date_lmer_varying_intercept_1 = glmer(match ~ attr + sinc + intel + fun + amb + shar + (1|iid) , family = binomial(link = "logit"), data = dating, nAGQ = 0)
+```
+
+```{r}
+display(date_lmer_varying_intercept_1)
+```
+
+**For the model including varying intercept for persons making the education, it has a deviance at 4608.8, which is lower than the original model at 5613.6, so we can see the varying intercept model is a slightly better model**
+
+
+### (c) ###
+
+**Fit the model using both intercepts from the rater and the persons being rated**
+```{r}
+date_lmer_varying_intercept_2 = glmer(match ~ attr + sinc + intel + fun + amb + shar + (1|iid) + (1|pid), family = binomial(link = "logit"), data = dating, nAGQ = 0)
+```
+
+```{r}
+display(date_lmer_varying_intercept_2)
+```
+
+**In our second varying intercept model including varying intercepts for both the persons making the evaluation and the persons being rated. We can see this model has a smaller AIC and a much smaller deviance, so this is a much better model than the model with just one varying intercept**
+
+
+## Question 14.6 ##
+
+### (a) ###
+
+**Fit a no-pooling model with varying slopes for all six predictors**
+```{r}
+date_glm_no_pooling = glm(match ~ attr + sinc + intel + fun + amb + shar + factor(iid) - 1, family = "binomial", data = dating)
+```
+
+
+```{r}
+display(date_glm_no_pooling)
+```
+
+
+### (b) ###
+
+**Create a new dataframe with variables  attr, sinc, intel, fun, amb, shar as group-level predictors based on the each rater(iid)**
+```{r}
+dating %>%
+  mutate(attr.full = attr[iid], sinc.full = sinc[iid], intel.full = intel[iid], fun.full = fun[iid], amb.full = amb[iid], shar.full = shar[iid]) ->
+  tidy_dating
+```
+
+
+**Glimpse at the new group-level predictors**
+```{r}
+head(tidy_dating %>%
+  dplyr::select(attr.full, sinc.full, intel.full, fun.full, amb.full, shar.full))
+```
+
+**Fit a multilevel non-nested model with the new group-level predictors**
+```{r}
+date_glm_multilevel = glmer(match ~ attr.full + sinc.full + intel.full + fun.full + amb.full + shar.full + (1|iid),  family = binomial(link = "logit"), data = tidy_dating, nAGQ = 0)
+```
+
+```{r}
+display(date_glm_multilevel)
+```
+
+
+
+### (c) ###
+
+**We can see the multilevel model has a deviance of 5504.1, much smaller than the no-pooling model at 4274.5, and slightly lower than the complete-pooling model at 5613.6, so we can see that the no-pooling model is the best of the three, followed by the multilevel model, then the complete-pooling model**
+
+
+
+## Question 15.1 ##
+
+```{r}
+library(foreign)
+nes = read.dta("./nes.dta")
+```
+
+
+**Filter the data by year 2000 and the people with intent to vote Bush, in this case, intent = 2**
+```{r}
+nes %>%
+  filter(year == 2000 & rep_pres_intent == 1) %>%
+  mutate(intent = 2)  ->
+  nes_bush
+```
+
+**Filter the data by year 2000 and the people with intent to vote Gore, in this case, intent = 0**
+```{r}
+nes %>%
+  filter(year == 2000 & rep_pres_intent == 0) %>%
+  mutate(intent = 0)  ->
+  nes_gore
+```
+
+**Filter the data by year 2000 and the people with no opinionos or other, in this case, intent = 1**
+```{r}
+nes %>%
+  filter(year == 2000 & is.na(rep_pres_intent)) %>%
+  mutate(intent = 1)  ->
+  nes_other
+```
+
+**Combine the data sets and tidy the variables by extracting the indices** 
+```{r}
+tidy_nes = bind_rows(nes_bush, nes_gore, nes_other)
+
+tidy_nes %>%
+  mutate(intent = as.factor(intent)) %>%
+  mutate(income = as.factor(str_extract(income, "[0-9]+")))->
+  final_nes
+```
+
+
+**Fit an ordered logistic model predicting voting intent by income, add a varying intercept by state**
+
+```{r}
+nes_ordered_logit = glmer(intent ~ income + (1|state), family = binomial(link = "logit"), data = final_nes)
+display(nes_ordered_logit)
+```
+
+**Income: 1 - 0 to 16 percentile, 2 - 17 to 33 percentile, 3 - 34 to 67 percentile, 4 - 68 to 95 percentile, 5 - 96 to 100 percentile**
+
+**Intent: 0 - Vote for Gore, 1 - No Opinions or Others, 2 - Vote for Bush**
+
+**We can see from the results that, for income, the odds of 17 to 33 percentile voting for Bush are (e^(0.30))^2 = 1.822 times higher than the odds of 0 to 16 percentile voting for Bush. The odds of 34 to 67 voting for Bush are (e^(0.38))^2 = 2.138 times higher than 0 to 16 percentile. The odds of 68 to 95 percentile voting for Bush are (e^(0.38)^2) = 2.138 times higher than 0 to 16 percentile. The odds of 96 to 100 percentile voting for Bush are (e^(1.01)^2) = 7.538 times higher than 0 to 16 percentile.**
+
+
+
+
+### Question 15. 2###
+
+### (a) ###
+
+
+**Extract the indices for party_id, ideo and race and gender, and create them as factors**
+```{r}
+final_nes %>%
+  mutate(party_id = as.factor(str_extract(str_partyid, "[0-9]+"))) %>%
+  mutate(ideo = as.factor(str_extract(ideo, "[0-9]+"))) %>%
+  mutate(race = as.factor(str_extract(race, "[0-9]+"))) %>%
+  mutate(gender = as.factor(str_extract(gender, "[0-9]+"))) ->
+  final_nes
+```
+
+
+**In the cleaned data, set up an ordered logistic regression to predict the party id (5 levels) with categorical variables gender(2 levels), ideo(3 levels) and race(5 levels). Add varying intercepts in terms of state in the model**
+
+### (b) ###
+
+**Fit the formulated model in glmer***
+```{r}
+nes_ordered_logit_var_int_slope = glmer(party_id ~ gender + ideo + race  +  (1 + ideo|state) + (1 + race|state) + (1 + gender|state), family = binomial(link = "logit"), data = final_nes, nAGQ = 0)
+```
+
+
+```{r}
+display(nes_ordered_logit_var_int_slope)
+```
+
+**Interpret the coefficients**
+
+**Party ID: 1 - Independent or Apolitical, 2 - Leaning Independent, 3 - Weak Partisan, 4 - Strong Partisan**
+
+**Ideology: 1 - Liberal, 3 - Moderate, 5 - Conservative**
+
+**In terms of ideology, the odds of a person having moderate ideology being  leaning independent is e^(-1.07) = 0.343 times less than that of a person having liberal ideology. The odds of a person having conservative ideology being a learning independent is e^(-0.19) = 0.827 times less than that of a person having liberal ideology**
+
+
+**Race: 1 - White, 2 - Black, 3 - Asian, 4 - Native American, 5 - Hispanic**
+
+**In terms of race, the odds of a black person is e^(-0.17) = 0.844 times less likely to be leaning independent than a white person. The odds of an asian person being independent is e^(0.07) = 1.073 times more likely than a white person to be leaning independent. The odds of a native American person being leaning independent is e^(0.21) = 1.234 times more likely than a white person The odds of a Hispanic person being leaning independent is e^(0.22) = 1.221 times more likely than a white person**
+
+
+**Gener : 1 - Male  2 - Female**
+
+**In terms of gender, females are e^(-0.23) = 0.795 times less likely than males to be leaning independent**
+
+

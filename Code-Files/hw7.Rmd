@@ -1,0 +1,79 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+---
+## Stat 618 HW7 ##
+
+## Tianqi Luo ##
+
+## 9.4 ##
+
+### (a) ###
+
+```{r}
+y0_hat = ((300 *4) + (300 * 4) + (500 * 4) + (500 * 4) + (200 * 10) + (200 * 10) + (200 * 10) + (200 * 10))/(2400)
+
+y1_hat = ((300 * 6) + (300 * 6) + (500 * 6) + (500 * 6) + (200 * 12) + (200 * 12) + (200 * 12) + (200 * 12)) /(2400)
+
+average_treatment_effect = y1_hat - y0_hat 
+
+average_treatment_effect
+
+```
+
+**Average treatment effect in this population of 2400 persons is 2**
+
+### (b) ###
+
+**When T = 0, there are ((300 + 200)/(300 * 2) + (200 * 2)) = 50% of x = 0, and 50% of x = 1**
+
+**When T = 1, there are ((500 + 200)/(500 * 2) + (200 * 2)) = 50% of x = 0, and 50% of x = 1**
+
+**Since the observed covariates are balanced it seems plausible that the data came from a randomized experiment**
+
+
+### (c) ###
+
+**When T = 0**
+
+```{r}
+y_t_0 = ((4 * 300) + (4 * 300) + (10 * 200) + (10 * 200))/((300 * 2) + (200 * 2)) 
+
+y_t_0
+```
+
+**When T = 1**
+
+```{r}
+y_t_1 = ((500 * 6) + (500 * 6) + (200 * 12) + (200 * 12))/(500 * 2 + 200 * 2)
+y_t_1
+```
+
+```{r}
+quantity = y_t_1 - y_t_0
+quantity
+```
+
+**The quantity is 1.314, which is different from the average treatment effect which is 2**
+
+**This quantity only uses the values that were observed from the responses. The average treatment effect uses both the observed responses as well as the responses made from the inferences. That's why the two values differ**
+
+
+### (d) ###
+
+**If the treatment assignment is ignorable, then P(T|y0, y1, x) should equal to P(T|x)**
+
+**Set T = 0, y0 = 4, y1 = 6, x = 0**
+
+````{r}
+p_t_0_condition_y0_4_y1_6_x_0 = (300) / (300 + 500)
+p_t_0_condition_x_0 = (300 + 200) / (300 + 500 + 200 + 200)
+```
+
+```{r}
+p_t_0_condition_y0_4_y1_6_x_0
+p_t_0_condition_x_0
+```
+
+**We can see that P(T|y0, y1, x) != P(T|x), that means the treatment assignment isn't ignorable given sex**

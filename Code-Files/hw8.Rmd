@@ -1,0 +1,207 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+---
+## Stat 618 HW8 ##
+
+## Tianqi Luo ##
+
+
+### 16.1 ###
+
+
+**Modeled Data: y**
+
+**Unmodeled Data: n, J, school, x, T**
+
+**Modeled Parameter: a**
+
+**Unmodeled Parameter: b, g.0, g.1, sigma.y, sigma.a**
+
+**Derived quartiles: y.hat, tau.y, sigma.y, a.hat, tau.a**
+
+**Looping Indexes: i, j**
+
+
+
+### 16.2 ###
+
+**line 3: hispanic should be hispanic[i]**
+
+**line 6: dnorm(0, 1000) is too large, should be dnorm(0, 0.0001)**
+
+**line 8 : rnorm(mu.a, tau.a^2) should be dnorm(mu.a, tau.a)**
+
+**line 14: sigma.y <- dunif(0, 100) should be sigma.y ~ dunif(0, 100)**
+
+
+
+
+## 16.3 ##
+
+### (a) ###
+
+
+**Load the packages, including R2WinBUGS which calls the WinBUGS.** 
+```{r}
+library(tidyverse)
+library(lubridate)
+library(R2WinBUGS)
+```
+
+
+**Remove all the NAs.**
+```{r, message = FALSE}
+cd4 = read_csv("./allvar.csv")
+cd4 = na.omit(cd4)
+```
+
+**Convert the character variable to a date variable**
+```{r}
+cd4$VDATE = mdy(cd4$VDATE)
+```
+
+**Set up the parameters**
+```{r}
+y <- cd4$CD4PCT
+n <- length(y)
+x <- cd4$VDATE
+newpid.name <- as.vector(cd4$newpid)
+uniq.name <- unique(newpid.name)
+J <- length(uniq.name)
+newpid <- rep(NA, J)
+for(i in 1:J){
+  newpid[newpid.name == uniq.name[i]] <- i
+}
+```
+
+
+
+**Write the BUGS code for an multilevel model with individual predictor and save it as "cd4.1.bug".** 
+```{r}
+mod <- function(){
+ for (i in 1:n){
+   y[i] ~ dnorm(y.hat[i], tau.y)
+   y.hat[i] <- a[newpid[i]] + b*x[i]
+}
+   b ~ dnorm(0, 0.0001)
+  tau.y <- pow(sigma.y, -2)
+  sigma.y ~ dunif(0, 100)
+for(j in 1:J) {
+  a[j] ~ dnorm(mu.a, tau.a)
+}
+  mu.a ~ dnorm(0, 0.0001)
+  tau.a <- pow(sigma.a, -2)
+  sigma.a ~ dunif(0, 100)
+}
+
+write.model(mod, "cd4.1.bug")
+model.file1 = paste(getwd(),"cd4.1.bug", sep="/")
+file.show("cd4.1.bug")
+```
+
+
+**Set up the list and the parameters.** 
+```{r}
+cd4.data = list("n", "J", "y", "newpid", "x")
+cd4.inits = function() {
+  list(a = rnorm(J), b = rnorm(1), mu.a = rnorm(1), sigma.y = runif(1), sigma.a = runif(1))}
+
+cd4.parameters = c("a", "b", "mu.a", "sigma.y", "sigma.a")
+```
+
+**Run the BUGS model with iteration 10000**
+```{r}
+set.seed(4744469)
+cd4.1 = bugs(cd4.data, cd4.inits, cd4.parameters, "cd4.1.bug", n.chains = 3, n.iter = 10000, bugs.directory = "/Users/tianqiluo49/winbugs14_full_patched-3/WinBUGS14/", debug = TRUE)
+```
+
+
+**Print out the results.**
+```{r}
+print(cd4.1)
+```
+
+**We can see in model 1, when we run 10000 iterations, the R_hats are all very close to 1, meaning the chains mix very well. The effect sizes are decent albeit not perfect. The DIC is 6822.4. So we can conclude that the BUGS model fits the data rather well**
+
+
+### (b) ###
+
+
+**Create group-level predictors for treatment and baseage.** 
+```{r}
+t = cd4$treatmnt[uniq.name]
+h = cd4$baseage[uniq.name]
+```
+
+
+**Write the multilevel model with group-level predictors in BUGS.**
+```{r}
+mod2 <- function(){
+ for (i in 1:n){
+   y[i] ~ dnorm(y.hat[i], tau.y)
+   y.hat[i] <- a[newpid[i]] + b*x[i]
+}
+b ~ dnorm(0, .0001)
+tau.y <- pow(sigma.y, -2)
+sigma.y ~ dunif(0, 100)
+ for(j in 1:J) {
+   a[j] ~ dnorm(a.hat[j], tau.a)
+   a.hat[j] <- g.0 + g.1*t[j] + g.2*h[j]
+}
+  g.0 ~ dnorm(0, .0001)
+  g.1 ~ dnorm(0, .0001)
+  g.2 ~ dnorm(0, .0001)
+  tau.a <- pow(sigma.a, -2)
+  sigma.a ~ dunif(0, 100)
+}
+
+write.model(mod2, "cd4.2.bug")
+model.file1 = paste(getwd(),"cd4.2.bug", sep="/")
+file.show("cd4.2.bug")
+```
+
+
+
+**Set up the parameters.** 
+```{r}
+cd4.2.data <- list("n", "J", "y", "newpid", "x", "t", "h")
+cd4.2.inits <- function(){
+list(a = rnorm(J), b = rnorm(1), g.0 = rnorm(1), g.1 = rnorm(1), g.2 = rnorm(1), sigma.y = runif(1), sigma.a = runif(1))}
+cd4.2.parameters <- c("a", "b", "sigma.y", "sigma.a")
+```
+
+
+**Run the model with iteration 10000** 
+```{r}
+set.seed(4744469)
+cd4.2 <- bugs (cd4.2.data, cd4.2.inits, cd4.2.parameters, "cd4.2.bug", n.chains = 3, n.iter = 10000, bugs.directory = "/Users/tianqiluo49/winbugs14_full_patched-3/WinBUGS14/", debug = TRUE)
+```
+
+**Print out the results**
+```{r}
+print(cd4.2)
+```
+
+**We can see that when we run 10000 iterations on the group-level predictor model, the R-hats are very close to 1, meaning the chains mix very well. The DIC is 6821.8, almost the same but slightly similar than the first model. Also the effect sizes are much greater than the first model. We can say BUGS fits both the individual level and multilevel model with group-predictors both fit the data quite well, although the second model is the better model**
+
+
+### (c) ###
+
+**We can see that the deviances from both lmer functions are 7895.9 and 7886.5, the DICs for both BUGS model are way smaller than the lmer functions, so they fit the models better. Also, the results are very detailed and intensive than the lmer function, since we can customize the iterations for the parameters. The BUGS models also run faster with extensive and complicated data**
+
+
+## 16.3(d) ##
+
+**Plot for multilevel model with individual predictor**
+```{r}
+plot(cd4.1)
+```
+
+**Plot for multilevel model with group predictors**
+```{r}
+plot(cd4.2)
+```
+
+**We can see from both plots that the 80% interval in each chain is more similar for the chains in model 2 than model 1, indicating the chains mix slightly better. Also model 2 has larger 80% intervals for all parameters than model 1. So we can see from that model 2 fits the data slightly better than model 1**

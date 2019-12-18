@@ -1,0 +1,455 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+---
+
+## Stat 618 HW 11 ##
+
+## Tianqi Luo ##
+
+## 24.2 ##
+
+### (a) ###
+
+```{r}
+library(R2WinBUGS)
+```
+
+```{r}
+library(foreign)
+
+scdata<-read.dta("./sc_realtimecong_BUGS.dta", convert.factors=F)
+```
+
+
+
+```{r, message = FALSE}
+scdata2<-read.dta("sc_realtimecong_BUGS_party.dta", convert.factors=F)
+```
+
+```{r}
+attach(scdata)
+```
+
+
+**Subset scdata by setting dock25 == 25**
+
+```{r, message = FALSE}
+scdata<-scdata[dock25==25,]
+```
+
+
+**Ideal-point model**
+```{r}
+model = function() {
+  
+  for (i in 1:n){
+
+    logit(pi[i]) <-beta1[case[i]]*(alpha[justice[i]]-beta2[case[i]])
+    pi.adj[i]<-e1+(1-e1-e2)*pi[i]
+    y[i]~dbern(pi.adj[i])   
+    y.rep[i]~dbern(pi[i])
+}
+
+   e1 ~ dunif(0, .1)
+   e2 ~ dunif(0, .1)
+
+for(j in 1:n.justices){
+    alpha[j] ~ dnorm(mu.alpha.hat[j],T.alpha)
+    mu.alpha.hat[j] <-  mu.alpha + gamma.party*party[j]
+
+    z.alpha[j] <- (alpha[j] - ref.mean)/ref.sd
+}
+    T.alpha <- pow(sigma.alpha,-2)
+    sigma.alpha ~ dunif(0,1000)
+    z.sigma.alpha <- sigma.alpha / ref.sd
+    mu.alpha ~ dnorm(0,.0001)
+
+ for(c in 1:n.cases){
+    beta1[c] ~ dnorm(mu.beta1, T.beta1)
+    beta2[c] ~ dnorm(mu.beta2, T.beta2)
+    z.beta2[c] <- (beta2[c] - ref.mean)/ref.sd
+    z.beta1[c] <- beta1[c] * ref.sd 
+}
+    
+    mu.beta1 ~ dnorm(0,.0001)
+    z.mu.beta1 <- mu.beta1*ref.sd
+    T.beta1 <-  pow(sigma.beta1,-2)
+    sigma.beta1 ~ dunif(0,1000)
+    z.sigma.beta1 <- sigma.beta1 * ref.sd 
+
+    mu.beta2 ~ dnorm(0,.0001)
+    z.mu.beta2 <- (mu.beta2 - ref.mean)/ref.sd
+    T.beta2 <-  pow(sigma.beta2,-2)
+    sigma.beta2 ~ dunif(0,1000)
+    z.sigma.beta2 <- sigma.beta2 / ref.sd
+
+    gamma.party ~ dunif(0, 1000)
+    z.gamma.party <- gamma.party/ref.sd 
+            
+
+    ref.mean <- mean(alpha[])
+    ref.sd <- sd(alpha[])
+
+}
+
+write.model(model, "ideal.bug")
+model.file1 = paste(getwd(),"ideal.bug", sep="/")
+file.show("ideal.bug")
+
+```
+
+**Do a subset of rows**
+```{r}
+n.subset <- 50
+selected.rows <- sample (nrow(scdata), n.subset)
+scdata <- scdata[selected.rows,]
+```
+
+```{r, message = FALSE}
+attach(scdata)
+```
+
+
+```{r}
+temp <- unique(justice) 
+n.justice <- length(temp)
+justid <- rep (NA, n.justice)
+for (i in 1:n.justice){
+  justid[justice==temp[i]] <- i
+}
+```
+
+```{r}
+temp <- unique (case)                 
+n.case <- length(temp)
+caseid <- rep (NA, n.case)
+for (i in 1:n.case){
+  caseid[case==temp[i]] <- i
+}
+```
+
+```{r}
+y = scdata$y
+party = scdata$party
+```
+
+
+
+
+
+```{r}
+scdata.list<-list(n=length(caseid), n.cases=max(caseid), n.justices=max(justid), y=y, case=caseid, justice=justid, party=party)
+```
+
+```{r}
+inits.1 <- list(e1=dunif(1, 0, .1), e2=dunif(1, 0, .1), sigma.beta2=.5, alpha=rnorm(9,0,1), beta1=rnorm(max(caseid),0,1), beta2=rnorm(max(caseid),0,1), mu.beta1=.5, mu.beta2=.5, sigma.beta1=.5, sigma.alpha=.5, gamma.party=.5)
+```
+
+```{r}
+inits.2 <- list(e1=dunif(1, 0, .1), e2=dunif(1, 0, .1), sigma.beta2=2, alpha=rnorm(9,0,2), beta1=rnorm(max(caseid),0,2), beta2=rnorm(max(caseid),0,2), mu.beta1=2, mu.beta2=2, sigma.beta1=2, sigma.alpha=2, gamma.party=2)
+```
+
+```{r}
+sc.inits <- list (inits.1, inits.2)
+```
+
+```{r}
+sc.parameters<-c("alpha", "beta1", "beta2", "y.rep")
+```
+
+
+**Run the ideal-point model**
+```{r}
+set.seed(4744469)
+sc.sim<-bugs(scdata.list, sc.inits, sc.parameters, "ideal.bug", n.chains=2, n.thin=1500, n.iter=15000, bugs.directory = "/Users/tianqiluo49/winbugs14_full_patched-3/WinBUGS14/", debug=T)
+```
+
+```{r}
+print(sc.sim)
+```
+
+**We can see the standard deviations for the coefficients are extremely large, so the ideal-point model is not a good fit for this data**
+
+```{r}
+dim(sc.sim$summary)
+```
+
+**Extract y.rep**
+```{r}
+y.rep = as.vector(sc.sim$summary[108:157, 1])
+```
+
+```{r}
+y.rep
+```
+
+**Extract the sd for y.rep**
+```{r}
+y.rep.sd = as.vector(sc.sim$summary[21:70, 2])
+```
+
+
+```{r}
+hist(y.rep, main="Histogram of Posterior Distribution for Party Predictor", cex.axis=1.4, cex.lab=1.5, breaks=20, xlab = "y.rep")
+```
+
+**The sds are very high for the parameters generated from this model.**
+
+
+```{r}
+hist(y.rep.sd, main="Histogram of Posterior Distribution for Party Predictor", cex.axis=1.4, cex.lab=1.5, breaks=20, xlab = "y.rep standard deviation")
+```
+
+**We can see the standard deviations are very large for some y.rep, so this model is far from perfect**
+
+
+
+### (b) ###
+
+**Expand this model into a classical logistic regression model**
+```{r}
+model = function() {
+    
+    for (i in 1:N) {
+        y[i] ~ dbern(p[i])
+        logit(p[i]) <- b.0 + b.1*justice[i] + b.2*case[i]
+    }
+   
+    
+    b.0    ~ dnorm(0, .0001)
+    b.1    ~ dnorm(0, .0001)
+    b.2   ~  dnorm(0, .0001)
+    
+    
+}
+
+write.model(model, "sc.expansion.bug")
+model.file1 = paste(getwd(),"sc.expansion.bug", sep="/")
+file.show("sc.expansion.bug")
+```
+
+```{r}
+justice = scdata$justice
+```
+
+
+
+```{r}
+case = scdata$case
+x = as.factor(case)
+levels(x) = seq(1, 50, 1)
+case = as.numeric(x)
+```
+
+
+```{r}
+scdata$case
+```
+
+```{r}
+N = nrow(scdata)
+```
+
+**Initiate the parameters**
+```{r}
+data <- list (justice = justice, case = case,  y = y, N = N)
+inits <- function (){
+list (b.0=rnorm(1), b.1=rnorm(1), b.2=rnorm(1))}
+parameters <- c ("b.0", "b.1", "b.2")
+```
+
+
+```{r}
+set.seed(4744469)
+sc.expansion.sim <- bugs(data, inits, parameters, "sc.expansion.bug",
+n.chains=3, n.iter=10000, n.thin=100, bugs.directory = "/Users/tianqiluo49/winbugs14_full_patched-3/WinBUGS14/", debug = T)
+```
+
+```{r}
+print(sc.expansion.sim)
+```
+
+**We can see the standard deviations are much smaller for the classical model than ideal-point model, we can see that this model is much better**
+
+
+## 24.2 ##
+
+```{r}
+library(tidyverse)
+dating = read.csv("./SpeedDatingData.csv")
+```
+
+**Select the variables from speed-dating data**
+```{r}
+dating %>%
+  dplyr::select(attr, sinc, intel, fun, amb, shar, match, iid, pid) ->
+  dating
+```
+
+**Omit the NAs**
+```{r}
+dating = na.omit(dating)
+```
+
+**Subset the dating data by 100.**
+```{r}
+dating = dating[1:100, ]
+```
+
+
+
+**Set up a logistic model for match and the six elements we select**
+```{r}
+model = function() {
+    
+    for (i in 1:N) {
+        match[i] ~ dbern(p[i])
+        logit(p[i]) <- b.0 + b.1*attr[i] + b.2*sinc[i] + 
+        b.3*intel[i] + b.4*fun[i] + b.5*amb[i] + b.6*shar[i] 
+    }
+   
+    
+    b.0    ~ dnorm(0, .0001)
+    b.1    ~ dnorm(0, .0001)
+    b.2   ~  dnorm(0, .0001)
+    b.3   ~  dnorm(0, .0001)
+    b.4    ~ dnorm(0, .0001)
+    b.5    ~ dnorm(0, .0001)
+    b.6    ~ dnorm(0, .0001)
+    
+}
+
+write.model(model, "dating.bug")
+model.file1 = paste(getwd(),"dating.bug", sep="/")
+file.show("dating.bug")
+```
+
+**Select the variables**
+```{r}
+attr = dating$attr
+sinc = dating$sinc
+intel = dating$intel
+fun = dating$fun
+amb = dating$amb
+shar = dating$shar
+match = dating$match
+N = nrow(dating)
+```
+
+**Initialize the variables**
+
+```{r}
+data <- list (attr = attr, sinc = sinc, intel = intel, fun = fun, amb = amb, shar = shar, match = match, N = N)
+inits <- function (){
+list (b.0=rnorm(1), b.1=rnorm(1), b.2=rnorm(1), b.3=rnorm(1), b.4=rnorm(1), b.5=rnorm(1), b.6=rnorm(1)) }
+parameters <- c ("b.0", "b.1", "b.2", "b.3", "b.4", "b.5", "b.6")
+```
+
+
+```{r}
+set.seed(4744469)
+dating.sim <- bugs(data, inits, parameters, "dating.bug",
+n.chains=3, n.iter=10000, n.thin=100, bugs.directory = "/Users/tianqiluo49/winbugs14_full_patched-3/WinBUGS14/", debug = T)
+```
+
+```{r}
+print(dating.sim)
+```
+
+
+
+```{r}
+hist(dating.sim$sims.list$b.1, main="Histogram of Posterior Distribution for Party Predictor", cex.axis=1.4, cex.lab=1.5, breaks=20, xlab = "b.1")
+```
+
+```{r}
+hist(dating.sim$sims.list$b.2, main="Histogram of Posterior Distribution for Party Predictor", cex.axis=1.4, cex.lab=1.5, breaks=20, xlab = "b.2")
+```
+
+```{r}
+hist(dating.sim$sims.list$b.3, main="Histogram of Posterior Distribution for Party Predictor", cex.axis=1.4, cex.lab=1.5, breaks=20, xlab = "b.3")
+```
+
+```{r}
+hist(dating.sim$sims.list$b.4, main="Histogram of Posterior Distribution for Party Predictor", cex.axis=1.4, cex.lab=1.5, breaks=20, xlab = "b.4")
+```
+
+```{r}
+hist(dating.sim$sims.list$b.5, main="Histogram of Posterior Distribution for Party Predictor", cex.axis=1.4, cex.lab=1.5, breaks=20, xlab = "b.5")
+```
+
+```{r}
+hist(dating.sim$sims.list$b.6, main="Histogram of Posterior Distribution for Party Predictor", cex.axis=1.4, cex.lab=1.5, breaks=20, xlab = "b.6")
+```
+
+**We can see the model fits the parameters rather well. However, the deviance is still relatively large, so the model is not the best fit for the data**
+
+
+### (b) ###
+
+**Expand the model by adding the random effect u based on group iid**
+
+```{r}
+iid = dating$iid
+J = length(unique(iid))
+```
+
+```{r}
+model = function() {
+    
+    for (i in 1:N) {
+        match[i] ~ dbern(p[i])
+        logit(p[i]) <- b.0 + b.1*attr[i] + b.2*sinc[i] + 
+        b.3*intel[i] + b.4*fun[i] + b.5*amb[i] + b.6*shar[i] + u[iid[i]] 
+    }
+  
+    for (j in 1:J) {
+        u[j] ~ dnorm(0,tau)
+    }
+    
+    
+    
+  
+    
+    b.0    ~ dnorm(0, .0001)
+    b.1    ~ dnorm(0, .0001)
+    b.2   ~  dnorm(0, .0001)
+    b.3   ~  dnorm(0, .0001)
+    b.4    ~ dnorm(0, .0001)
+    b.5    ~ dnorm(0, .0001)
+    b.6    ~ dnorm(0, .0001)
+    tau ~ dgamma(0.001, 0.001)
+}
+
+write.model(model, "dating.expansion.bug")
+model.file1 = paste(getwd(),"dating.expansion.bug", sep="/")
+file.show("dating.expansion.bug")
+```
+
+
+```{r}
+data <- list (attr = attr, sinc = sinc, intel = intel, fun = fun, amb = amb, shar = shar, match = match, iid = iid, N = N, J = J)
+inits <- function (){
+list (b.0=rnorm(1), b.1=rnorm(1), b.2=rnorm(1), b.3=rnorm(1), b.4=rnorm(1), b.5=rnorm(1), b.6=rnorm(1), tau = 1, u = rnorm(J))}
+parameters <- c ("b.0", "b.1", "b.2", "b.3", "b.4", "b.5", "b.6")
+```
+
+```{r}
+set.seed(4744469)
+dating.expansion.sim <- bugs(data, inits, parameters, "dating.expansion.bug",
+n.chains=3, n.iter=10000, n.thin=100, bugs.directory = "/Users/tianqiluo49/winbugs14_full_patched-3/WinBUGS14/", debug = T)
+```
+
+
+
+```{r}
+print(dating.expansion.sim)
+```
+
+**We can see when we expand the model, the deviance became much smaller while the standard deviations didn't change by much. So we can see the model is indeed improved when we expand it**
+
+
+
+

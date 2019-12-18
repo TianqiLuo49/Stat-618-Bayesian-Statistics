@@ -1,0 +1,364 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+---
+## Stat 618 HW 9 ##
+
+## Tianqi Luo ##
+
+## 17.2 ##
+
+### (a) ###
+
+```{r}
+library(covBM)
+library(tidyverse)
+library(lubridate)
+library(R2WinBUGS)
+library(MCMCpack)
+library(coda)
+```
+
+
+```{r, message = FALSE}
+cd4 = read_csv("./allvar.csv")
+cd4 = na.omit(cd4)
+```
+
+```{r}
+head(cd4)
+```
+
+**Convert VDATE into a date variable**
+```{r}
+cd4$VDATE = mdy(cd4$VDATE)
+```
+
+**Initiate the parameters**
+```{r}
+y <- cd4$CD4PCT
+n <- length(y)
+x <- cd4$VDATE
+newpid.name <- as.vector(cd4$newpid)
+uniq.name <- unique(newpid.name)
+J <- length(uniq.name)
+newpid <- rep(NA, J)
+for(i in 1:J){
+  newpid[newpid.name == uniq.name[i]] <- i
+}
+```
+
+**Add group-level predictors for visage, treatment and baseage**
+```{r}
+k = cd4$visage[uniq.name]
+t = cd4$treatmnt[uniq.name]
+h = cd4$baseage[uniq.name]
+```
+
+
+**Fit the model with the group-level predictors**
+```{r}
+mod4 <- function(){
+ for (i in 1:n){
+   y[i] ~ dnorm(y.hat[i], tau.y)
+   y.hat[i] <- a[newpid[i]] + b*x[i]
+}
+b ~ dnorm(0, .0001)
+tau.y <- pow(sigma.y, -2)
+sigma.y ~ dunif(0, 100)
+ for(j in 1:J) {
+   a[j] ~ dnorm(a.hat[j], tau.a)
+   a.hat[j] <- g.0 + g.1*k[j] + g.2*t[j] + g.3*h[j]
+}
+  g.0 ~ dnorm(0, .0001)
+  g.1 ~ dnorm(0, .0001)
+  g.2 ~ dnorm(0, .0001)
+  g.3 ~ dnorm(0, .0001)
+  tau.a <- pow(sigma.a, -2)
+  sigma.a ~ dunif(0, 100)
+}
+
+write.model(mod4, "cd4.4.bug")
+model.file1 = paste(getwd(),"cd4.4.bug", sep="/")
+file.show("cd4.4.bug")
+```
+
+
+**Set up the list and the parameters.** 
+```{r}
+cd4.4.data = list("n", "J", "y", "newpid", "x", "k", "t", "h")
+cd4.4.inits = function() {
+  list(a = rnorm(J), b = rnorm(1), g.0 = rnorm(1), g.1 = rnorm(1), g.2 = rnorm(1), g.3 = rnorm(1), sigma.y = runif(1), sigma.a = runif(1))}
+
+cd4.4.parameters = c("a", "b", "sigma.y", "sigma.a")
+```
+
+
+**Run the group-level predictor model in BUGS**
+```{r}
+set.seed(4744469)
+cd4.4 = bugs(cd4.4.data, cd4.4.inits, cd4.4.parameters, "cd4.4.bug", n.chains = 3, n.iter = 10000, bugs.directory = "/Users/tianqiluo49/winbugs14_full_patched-3/WinBUGS14/", debug = TRUE)
+```
+
+**Print out the results**
+```{r}
+print(cd4.4)
+```
+
+**We can see that with the addition of group-level predictors, compared to the model without group-level predictors, the chains mix better and the effect sizes are significantly larger while the DICs are roughly the same, so we can see that this model is a better model than the one without group-level predictors**
+
+### (b) ###
+
+```{r}
+plot(cd4.4)
+```
+
+**We can see from the plot that the chains mix very well, and the 80% intervals for all parameters are extensive, which means the model with group-level predictors is a good fit for the data**
+
+
+
+## 17.3 ##
+
+### (a) ###
+
+**Fit the model in BUGS allowing the coefficient for date to vary by newpid**
+
+```{r}
+mod5 <- function() {
+  for (i in 1:n){
+    y[i] ~ dnorm (y.hat[i], tau.y)
+    y.hat[i] <- a[newpid[i]] + b[newpid[i]]*x[i] 
+ }
+    tau.y <- pow(sigma.y, -2) 
+    sigma.y ~ dunif (0, 100)
+
+  for (j in 1:J){
+     a[j] <- xi.a*B.raw[j,1]
+     b[j] <- xi.b*B.raw[j,2]
+     B.raw[j,1:2] ~ dmnorm (B.raw.hat[j,], Tau.B.raw[,]) 
+     B.raw.hat[j,1] <- mu.a.raw
+     B.raw.hat[j,2] <- mu.b.raw 
+
+}
+    mu.a <- xi.a*mu.a.raw
+    mu.b <- xi.b*mu.b.raw 
+    mu.a.raw ~ dnorm (0, .0001) 
+    mu.b.raw ~ dnorm (0, .0001)
+
+    xi.a ~ dunif (0, 100) 
+    xi.b ~ dunif (0, 100)
+    Tau.B.raw[1:2,1:2] ~ dwish (W[,], df)
+    df <- 3
+    Sigma.B.raw[1:2,1:2] <- inverse(Tau.B.raw[,]) 
+    sigma.a <- xi.a*sqrt(Sigma.B.raw[1,1]) 
+    sigma.b <- xi.b*sqrt(Sigma.B.raw[2,2])
+    rho <- Sigma.B.raw[1,2]/sqrt(Sigma.B.raw[1,1]*Sigma.B.raw[2,2]) 
+}
+
+write.model(mod5, "cd4.5.bug")
+model.file1 = paste(getwd(),"cd4.5.bug", sep="/")
+file.show("cd4.5.bug")
+```
+
+**Initiate the parameters**
+```{r}
+W = diag(2)
+cd4.5.data <- list ("n", "J", "y", "newpid", "x", "W") 
+
+cd4.5.inits <- function (){
+list (B.raw=array(rnorm(2*J),c(J,2)), mu.a.raw=rnorm(1), mu.b.raw=rnorm(1), sigma.y=runif(1), Tau.B.raw=rwish(3,diag(2)), xi.a=runif(1), xi.b=runif(1))}
+
+
+cd4.5.parameters <- c ("a", "b", "mu.a", "mu.b", "sigma.y", "sigma.a", "sigma.b", "rho")
+```
+
+**Run the model in BUGS**
+```{r}
+set.seed(4744469)
+cd4.5 <- bugs (cd4.5.data, cd4.5.inits, cd4.5.parameters, "cd4.5.bug", n.chains=3, n.iter=10000, bugs.directory = "/Users/tianqiluo49/winbugs14_full_patched-3/WinBUGS14/", debug = TRUE)
+```
+
+**Print out the results**
+```{r}
+print(cd4.5)
+```
+
+**We can see that all the Rhats are close to 1, indicating the chains mix very well. We can also see that the effect sizes range from decent to large, so we can see that this is a decent model for the data**
+
+
+
+### (b) ###
+
+**Set up the variables**
+```{r}
+treatment = cd4$treatmnt
+baseage = cd4$baseage
+```
+
+
+**Create a column of constant term for the matrix**
+```{r}
+first_column = rep(1, n)
+```
+
+**Bundle everything into a matrix X**
+```{r}
+X = data.matrix(data.frame(first_column, x, treatment))
+K <- ncol(X)
+```
+
+**Write a model in BUGS to allow all the coefficients to vary by newpid**
+```{r}
+mod6 <- function(){
+  for (i in 1:n){
+    y[i] ~ dnorm (y.hat[i], tau.y)
+    y.hat[i] <- inprod(B[newpid[i],],X[i,]) 
+ }
+  
+tau.y <- pow(sigma.y, -2) 
+sigma.y ~ dunif (0, 100)
+
+for (j in 1:J){ 
+  for (k in 1:K){
+      B[j,k] <- xi[k]*B.raw[j,k] 
+ }
+                B.raw[j,1:K] ~ dmnorm (mu.raw[], Tau.B.raw[,]) 
+ } 
+for (k in 1:K){
+      mu[k] <- xi[k]*mu.raw[k] 
+      mu.raw[k] ~ dnorm (0, .0001) 
+      xi[k] ~ dunif (0, 100)
+ }
+     Tau.B.raw[1:K,1:K] ~ dwish (W[,], df)
+     df <- K+1
+     Sigma.B.raw[1:K,1:K] <- inverse(Tau.B.raw[,]) 
+for (k in 1:K){
+  for (k.prime in 1:K){
+            rho.B[k,k.prime] <- Sigma.B.raw[k,k.prime]/sqrt(Sigma.B.raw[k,k]*Sigma.B.raw[k.prime,k.prime]) 
+  }
+      sigma.B[k] <- abs(xi[k])*sqrt(Sigma.B.raw[k,k]) 
+  }
+}
+
+write.model(mod6, "cd4.6.bug")
+model.file1 = paste(getwd(),"cd4.6.bug", sep="/")
+file.show("cd4.6.bug")
+```
+
+**Initialize the parameters**
+```{r}
+W <- diag (K)
+cd4.6.data <- list ("n", "J", "K", "y", "newpid", "X", "W") 
+cd4.6.inits <- function (){
+list (B.raw=array(rnorm(J*K),c(J,K)), mu.raw=rnorm(K), sigma.y=runif(1), Tau.B.raw=rwish(K+1,diag(K)), xi=runif(K))}
+
+cd4.6.parameters <- c ("B", "mu", "sigma.y", "sigma.B", "rho.B") 
+```
+
+**Run the model in WinBUGS**
+```{r}
+set.seed(4744469)
+cd4.6 <- bugs (cd4.6.data, cd4.6.inits, cd4.6.parameters,
+"cd4.6.bug", n.chains=3, n.iter=2000, bugs.directory = "/Users/tianqiluo49/winbugs14_full_patched-3/WinBUGS14/", debug = TRUE)
+```
+
+**Print out the results**
+```{r}
+print(cd4.6)
+```
+
+**The Rhats from this model are close to 1, so we can conclude that the chains mix relatively well. However, we can see the effect sizes are mostly decent to small, very few effect sizes are big, and the DIC is negative, so this is not a good model to fit the data since the variance is small when they vary for newpid for the dataset**
+
+
+### (c) ###
+
+**Generate the plots**
+```{r}
+plot(cd4.5)
+```
+
+
+
+```{r}
+plot(cd4.6)
+```
+
+**We can see from the plots that, the chains mix better for the first model, also the 80% confidence intervals are more extensive. So it works better we only allow the date to vary by newpid, instead of having all the coefficients vary by newpid**
+
+
+
+## 17.5 ##
+
+**Run a non-nested model for the cd4 percentage based on groups of  treatments and newpids**
+
+```{r}
+mod7 <- function() {
+      for (i in 1:n){
+      y[i] ~ dnorm (y.hat[i], tau.y)
+      y.hat[i] <- mu + gamma[treatment[i]] + delta[newpid[i]] 
+ }
+  mu ~ dnorm (0, .0001) 
+  tau.y <- pow(sigma.y, -2) 
+  sigma.y ~ dunif (0, 100)
+      
+      for (h in 1:H){ 
+       gamma[h] ~ dnorm (0, tau.gamma)
+ }
+  tau.gamma <- pow(sigma.gamma, -2) 
+  sigma.gamma ~ dunif (0, 100)
+  
+      for (k in 1:K){
+   
+        delta[k] ~ dnorm (0, tau.delta) 
+ }
+  tau.delta <- pow(sigma.delta, -2)
+  sigma.delta ~ dunif (0, 100) 
+
+}
+
+write.model(mod7, "cd4.7.bug")
+model.file1 = paste(getwd(),"cd4.7.bug", sep="/")
+file.show("cd4.7.bug")
+```
+
+
+**Set up the variables**
+```{r}
+n.treatment = unique(treatment)
+n.newpid = unique(newpid)
+H = length(n.treatment)
+K = length(n.newpid)
+```
+
+
+**Initialize the parameters**
+```{r}
+cd4.7.data = list("n", "H", "K", "y", "newpid", "treatment")
+cd4.7.inits = function() {
+  list(gamma = rnorm(H), delta = rnorm(K), mu = rnorm(1), sigma.y = runif(1), sigma.gamma = runif(1), sigma.delta = runif(1))}
+
+cd4.7.parameters = c("gamma", "delta", "mu", "sigma.y", "sigma.gamma", "sigma.delta")
+```
+
+**Run the model in WinBUGS**
+```{r}
+set.seed(4744469)
+cd4.7 = bugs(cd4.7.data, cd4.7.inits, cd4.7.parameters, "cd4.7.bug", n.chains = 3, n.iter = 2000, bugs.directory = "/Users/tianqiluo49/winbugs14_full_patched-3/WinBUGS14/", debug = TRUE)
+```
+
+
+**Print the result**
+```{r}
+print(cd4.7)
+```
+
+**From the results, we can see that nearly all the Rhats are one, so the chains completely mix. Also, all the effect sizes are very large. So we can see, the non-nested model works very well for the data**
+
+
+
+```{r}
+plot(cd4.7)
+```
+
+**From the plots, we can see the chains do indeed mix very well, and the 80% confidence intervals are extensive for all parameters, so the non-nested model indeed works well for the data**

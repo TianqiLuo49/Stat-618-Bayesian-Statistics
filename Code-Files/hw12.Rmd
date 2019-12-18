@@ -1,0 +1,183 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+---
+## Stat 618 HW 12 ##
+
+## Tianqi Luo ##
+
+
+
+
+
+
+
+## 1 ##
+
+```{r}
+library(lme4)
+library(mice)
+library(tidyverse)
+library(arm)
+```
+
+**Read the data**
+```{r}
+star98.missing = read.table("http://jeffgill.org/files/jeffgill/files/star98.missing.dat_.txt", header = TRUE)
+```
+
+
+
+
+
+
+**Plot the scatterplot for SUBSIDIZED.LUNCH and READING.ABOVE.50, and plot the linear regression line**
+```{r}
+plot(star98.missing$SUBSIDIZED.LUNCH,star98.missing$READING.ABOVE.50,pch="+",col="blue", xlab = "SUBSIDIZED.LUNCH", ylab = "READING.ABOVE.50", main = "SUBSIDIZED.LUNCH vs READING.ABOVE.50")
+
+abline(lm(star98.missing$READING.ABOVE.50~star98.missing$SUBSIDIZED.LUNCH),lwd=3)
+```
+
+
+
+
+
+**Plot the scatterplot for PTRATIO vs READING.ABOVE.50, and plot the linear regression line between the two variables**
+```{r}
+plot(star98.missing$PTRATIO,star98.missing$READING.ABOVE.50,pch="+",col="blue", xlab = "PTRATIO", ylab = "READING.ABOVE.50", main = "PTRATIO vs READING.ABOVE.50")
+
+abline(lm(star98.missing$READING.ABOVE.50~star98.missing$PTRATIO),lwd=3)
+```
+
+
+
+
+**We can see the linear regression is a good fit  for READING.ABOVE.50 vs SUBSIDIZED LUNCH. However, for READING.ABOVE.50 vs PTRATIO, the linear relationship is not so obvious since there are too many missing values**
+
+
+**Use mice to impute the missing data**
+```{r}
+imp = mice(star98.missing, m = 10, printFlag = FALSE, maxit = 40, seed = 4744469)
+```
+
+**Fit the model with the mice data**
+```{r}
+fit.mi = with(data = imp, exp = lm(READING.ABOVE.50 ~ PTRATIO + SUBSIDIZED.LUNCH))
+```
+
+```{r}
+combFit = pool(fit.mi)
+```
+
+```{r}
+summary(combFit)
+```
+
+```{r}
+fit = lm(READING.ABOVE.50 ~ PTRATIO + SUBSIDIZED.LUNCH, data = na.omit(star98.missing))
+```
+
+```{r}
+display(fit)
+```
+
+
+
+```{r}
+pool.r.squared(fit.mi)
+```
+
+**We can see the R-squared in both cases are similar. However, the coefficients for the independent variables in the case where we omit the missing data has a smaller standard deviation for the coefficient for PTRATIO and slightly bigger standard deviation for SUBSIDIZED.LUNCH. Since it has slighlty bigger r-squared, slightly and slightly smaller standard deviation for PTRATIO and the Intercept, we conclude that the second model is slightly better**
+
+## 2 ##
+
+**The r code is using mean imputation to replace the missing value in the row with the mean of the column**
+
+**This method is not ideal because it can severley distort the distribution for the variable, leading to complications with summary measures including underestimates of the standard deviation. It also distorts relationships between variables by "pulling" estimates of the correlation toward zero.**
+
+
+## 3 ##
+
+**In Wikipedia, it used the Income dataset to explain the casewise/listwise deletion**
+
+```{r}
+library(readxl)
+income = read_xlsx("./Income.xlsx")
+```
+
+```{r}
+income
+```
+
+**Convert the variables to numeric and factor**
+```{r}
+income %>%
+  mutate(Age = as.numeric(Age)) %>%
+  mutate(Income = as.numeric(Income)) %>%
+  mutate(Gender = as.factor(Gender))->
+  income
+```
+
+**Use case-wise deletion to delete all rows with NAs**
+```{r}
+library(tidyverse)
+income %>%
+  filter(Age != "NA") %>%
+  filter(Gender != "NA") %>%
+  filter(Income != "NA") ->
+  income_case_delete
+```
+
+**Case-wise deletion data**
+```{r}
+income_case_delete
+```
+
+**Use the case-wise deletion data to fit a linear model with income vs age and gender**
+```{r}
+fit_income = lm(Income ~ Age + Gender, data = income_case_delete)
+```
+
+**Display the summary**
+```{r}
+display(fit_income)
+```
+
+**We can see the the R-squared is relatively small, and the standard errors for the coefficients are extremely large, so we can see that using case-wise deletion might not be the best way**
+
+
+**Use imputation to make the model better**
+
+**Convert the gender missing value to M but imputing from the last value carried forward**
+```{r}
+levels(income$Gender) = c("F", "M", "M")
+```
+
+**Calculate the means for Age and Income**
+```{r}
+income %>%
+  summarize(mean_age = mean(Age, na.rm = TRUE), mean_income = mean(Income, na.rm = TRUE))
+```
+
+**Impute the missing values for Age and Income by their means**
+```{r}
+income %>%
+  replace_na(list(Age = 39, Income = 54444.44 )) ->
+  income_impute
+```
+
+**Imputation data**
+```{r}
+income_impute
+```
+
+**Fit another model using the imputation data**
+```{r}
+fit_impute = lm(Income ~ Age + Gender, data = income_impute)
+display(fit_impute)
+```
+
+**We can see from the model that, although the R-squared is still relatively small, the standard errors for the coefficients are much smaller than the previous small, for the Intercept and Age they are even twice as small. So we can the imputation method yields a much better model**
+
+
